@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: wechatopenai/weknora-ui:${WEKNORA_VERSION:-latest}
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/wechatopenai/weknora-ui:${WEKNORA_VERSION:-latest}
     build:
       context: ./frontend
       args:
@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: wechatopenai/weknora-app:${WEKNORA_VERSION:-latest}
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/wechatopenai/weknora-app:${WEKNORA_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.app
@@ -138,7 +138,7 @@ services:
 
   # Sandbox 镜像：仅用于 build/pull，非常驻服务；app 执行 Skills 时按需 docker run 该镜像，用毕即释
   sandbox:
-    image: wechatopenai/weknora-sandbox:${WEKNORA_VERSION:-latest}
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/wechatopenai/weknora-sandbox:${WEKNORA_VERSION:-latest}
     container_name: WeKnora-sandbox
     build:
       context: .
@@ -149,7 +149,7 @@ services:
     restart: "no"
 
   docreader:
-    image: wechatopenai/weknora-docreader:${WEKNORA_VERSION:-latest}
+    image: docker.io/wechatopenai/weknora-docreader:${WEKNORA_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.docreader
@@ -177,12 +177,14 @@ services:
 
   # 修改的PostgreSQL配置
   postgres:
-    image: paradedb/paradedb:v0.22.2-pg17
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/paradedb/paradedb:v0.18.9-pg17
     container_name: WeKnora-postgres
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -198,15 +200,17 @@ services:
     stop_grace_period: 1m
 
   redis:
-    image: redis:7.0-alpine
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:7.0-alpine
     container_name: WeKnora-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "${REDIS_PORT:-30300}:6379"
     restart: always
     networks:
       - WeKnora-network
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: WeKnora-minio
     ports:
       - "${MINIO_PORT:-9000}:9000"
@@ -229,18 +233,18 @@ services:
       - full
 
   jaeger:
-    image: jaegertracing/all-in-one:1.76.0
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jaegertracing/all-in-one:1.70.0
     container_name: WeKnora-jaeger
     ports:
-      - "6831:6831/udp" # Jaeger Thrift接收器
-      - "6832:6832/udp" # Jaeger Thrift接收器(Compact)
-      - "5778:5778" # 配置端口
-      - "16686:16686" # Web UI
-      - "4317:4317" # OTLP gRPC接收器
-      - "4318:4318" # OTLP HTTP接收器
-      - "14250:14250" # 接收模型端口
-      - "14268:14268" # Jaeger HTTP接收器
-      - "9411:9411" # Zipkin兼容性端口
+      - "${JAEGER_THRIFT_PORT:-6831}:6831/udp"      # Jaeger Thrift接收器
+      - "${JAEGER_THRIFT_COMPACT_PORT:-6832}:6832/udp" # (Compact)
+      - "${JAEGER_CONFIG_PORT:-5778}:5778"         # 配置端口
+      - "${JAEGER_UI_PORT:-16686}:16686"           # Web UI
+      - "${JAEGER_OTLP_GRPC_PORT:-4317}:4317"      # OTLP gRPC接收器
+      - "${JAEGER_OTLP_HTTP_PORT:-4318}:4318"      # OTLP HTTP接收器
+      - "${JAEGER_MODEL_PORT:-14250}:14250"        # 接收模型端口
+      - "${JAEGER_HTTP_PORT:-14268}:14268"         # Jaeger HTTP接收器
+      - "${JAEGER_ZIPKIN_PORT:-9411}:9411"         # Zipkin兼容性端口
     environment:
       - COLLECTOR_OTLP_ENABLED=true
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411
@@ -254,7 +258,7 @@ services:
       - full
 
   neo4j:
-    image: neo4j:2025.10.1
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/neo4j:2025.10.1
     container_name: WeKnora-neo4j
     volumes:
       - neo4j-data:/data
@@ -265,8 +269,8 @@ services:
       - NEO4J_apoc_import_file_use__neo4j__config=true
       - NEO4JLABS_PLUGINS=["apoc"]
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
     restart: always
     networks:
       - WeKnora-network
@@ -275,7 +279,7 @@ services:
       - full
 
   qdrant:
-    image: qdrant/qdrant:v1.16.2
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/qdrant/qdrant:v1.16.2
     container_name: WeKnora-qdrant
     ports:
       - "${QDRANT_REST_PORT:-6333}:6333"
@@ -290,7 +294,7 @@ services:
       - full
 
   milvus:
-    image: milvusdb/milvus:v2.6.11
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/milvusdb/milvus:v2.6.11
     container_name: WeKnora-milvus
     security_opt:
       - seccomp:unconfined
@@ -307,8 +311,8 @@ services:
       timeout: 20s
       retries: 3
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "${MILVUS_PORT:-19530}:19530"   # Milvus API/gRPC 端口
+      - "${MILVUS_ADMIN_PORT:-9091}:9091" # Milvus 管理/监控端口
     volumes:
       - milvus_data:/var/lib/milvus
     networks:
@@ -318,7 +322,7 @@ services:
       - milvus
 
   weaviate:
-    image: semitechnologies/weaviate:1.28.4
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/semitechnologies/weaviate:1.28.4
     container_name: WeKnora-weaviate
     environment:
       - PERSISTENCE_DATA_PATH=/var/lib/weaviate
