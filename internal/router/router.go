@@ -53,13 +53,15 @@ type RouterParams struct {
 	InitializationHandler *handler.InitializationHandler
 	SystemHandler         *handler.SystemHandler
 	MCPServiceHandler     *handler.MCPServiceHandler
-	WebSearchHandler      *handler.WebSearchHandler
+	WebSearchHandler              *handler.WebSearchHandler
+	WebSearchProviderHandler      *handler.WebSearchProviderHandler
 	FAQHandler            *handler.FAQHandler
 	TagHandler            *handler.TagHandler
 	CustomAgentHandler    *handler.CustomAgentHandler
 	SkillHandler          *handler.SkillHandler
 	OrganizationHandler   *handler.OrganizationHandler
 	IMHandler             *handler.IMHandler
+	DataSourceHandler     *handler.DataSourceHandler
 }
 
 // NewRouter 创建新的路由
@@ -136,10 +138,12 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterSystemRoutes(v1, params.SystemHandler)
 		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler)
 		RegisterWebSearchRoutes(v1, params.WebSearchHandler)
+		RegisterWebSearchProviderRoutes(v1, params.WebSearchProviderHandler)
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler)
 		RegisterSkillRoutes(v1, params.SkillHandler)
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler)
 		RegisterIMChannelRoutes(v1, params.IMHandler)
+		RegisterDataSourceRoutes(v1, params.DataSourceHandler)
 	}
 
 	return r
@@ -393,6 +397,9 @@ func RegisterEvaluationRoutes(r *gin.RouterGroup, handler *handler.EvaluationHan
 func RegisterAuthRoutes(r *gin.RouterGroup, handler *handler.AuthHandler) {
 	r.POST("/auth/register", handler.Register)
 	r.POST("/auth/login", handler.Login)
+	r.GET("/auth/oidc/config", handler.GetOIDCConfig)
+	r.GET("/auth/oidc/url", handler.GetOIDCAuthorizationURL)
+	r.GET("/auth/oidc/callback", handler.OIDCRedirectCallback)
 	r.POST("/auth/refresh", handler.RefreshToken)
 	r.GET("/auth/validate", handler.ValidateToken)
 	r.POST("/auth/logout", handler.Logout)
@@ -418,6 +425,7 @@ func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.Initializ
 	r.POST("/initialization/remote/check", handler.CheckRemoteModel)
 	r.POST("/initialization/embedding/test", handler.TestEmbeddingModel)
 	r.POST("/initialization/rerank/check", handler.CheckRerankModel)
+	r.POST("/initialization/asr/check", handler.CheckASRModel)
 	r.POST("/initialization/multimodal/test", handler.TestMultimodalFunction)
 
 	r.POST("/initialization/extract/text-relation", handler.ExtractTextRelations)
@@ -469,6 +477,25 @@ func RegisterWebSearchRoutes(r *gin.RouterGroup, webSearchHandler *handler.WebSe
 	{
 		// Get available providers
 		webSearch.GET("/providers", webSearchHandler.GetProviders)
+	}
+}
+
+// RegisterWebSearchProviderRoutes registers CRUD routes for web search provider configurations
+func RegisterWebSearchProviderRoutes(r *gin.RouterGroup, h *handler.WebSearchProviderHandler) {
+	providers := r.Group("/web-search-providers")
+	{
+		// List available provider types (metadata for UI forms)
+		providers.GET("/types", h.ListProviderTypes)
+		// Test with raw credentials (no persistence)
+		providers.POST("/test", h.TestProviderRaw)
+		// CRUD
+		providers.POST("", h.CreateProvider)
+		providers.GET("", h.ListProviders)
+		providers.GET("/:id", h.GetProvider)
+		providers.PUT("/:id", h.UpdateProvider)
+		providers.DELETE("/:id", h.DeleteProvider)
+		// Test existing saved provider
+		providers.POST("/:id/test", h.TestProviderByID)
 	}
 }
 
@@ -736,4 +763,37 @@ func serveFiles(r *gin.Engine) {
 			logger.Warnf(context.Background(), "[Router] /files write response failed: %v", err)
 		}
 	})
+}
+
+// RegisterDataSourceRoutes 注册数据源相关的路由
+func RegisterDataSourceRoutes(r *gin.RouterGroup, handler *handler.DataSourceHandler) {
+	// Data source routes
+	ds := r.Group("/datasource")
+	{
+		// Get available connector types
+		ds.GET("/types", handler.GetAvailableConnectors)
+
+		// Validate credentials without persistence (for "Test Connection" button)
+		ds.POST("/validate-credentials", handler.ValidateCredentials)
+
+		// CRUD operations
+		ds.POST("", handler.CreateDataSource)
+		ds.GET("", handler.ListDataSources)
+		ds.GET("/:id", handler.GetDataSource)
+		ds.PUT("/:id", handler.UpdateDataSource)
+		ds.DELETE("/:id", handler.DeleteDataSource)
+
+		// Connection and resource management
+		ds.POST("/:id/validate", handler.ValidateConnection)
+		ds.GET("/:id/resources", handler.ListAvailableResources)
+
+		// Sync management
+		ds.POST("/:id/sync", handler.ManualSync)
+		ds.POST("/:id/pause", handler.PauseDataSource)
+		ds.POST("/:id/resume", handler.ResumeDataSource)
+
+		// Sync logs
+		ds.GET("/:id/logs", handler.GetSyncLogs)
+		ds.GET("/logs/:log_id", handler.GetSyncLog)
+	}
 }

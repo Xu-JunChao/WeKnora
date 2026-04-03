@@ -47,9 +47,11 @@ import (
 	"github.com/Tencent/WeKnora/internal/application/service/llmcontext"
 	memoryService "github.com/Tencent/WeKnora/internal/application/service/memory"
 	"github.com/Tencent/WeKnora/internal/application/service/retriever"
-	"github.com/Tencent/WeKnora/internal/application/service/web_search"
+	infra_web_search "github.com/Tencent/WeKnora/internal/infrastructure/web_search"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/database"
+	"github.com/Tencent/WeKnora/internal/datasource"
+	feishuConnector "github.com/Tencent/WeKnora/internal/datasource/connector/feishu"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
@@ -143,6 +145,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewAgentShareRepository))
 	must(container.Provide(repository.NewTenantDisabledSharedAgentRepository))
 	must(container.Provide(service.NewWebSearchStateService))
+	must(container.Provide(repository.NewDataSourceRepository))
+	must(container.Provide(repository.NewSyncLogRepository))
 
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
@@ -176,9 +180,11 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Web search service (needed by AgentService)
 	logger.Debugf(ctx, "[Container] Registering web search registry and providers...")
-	must(container.Provide(web_search.NewRegistry))
+	must(container.Provide(infra_web_search.NewRegistry))
 	must(container.Invoke(registerWebSearchProviders))
+	must(container.Provide(repository.NewWebSearchProviderRepository))
 	must(container.Provide(service.NewWebSearchService))
+	must(container.Provide(service.NewWebSearchProviderService))
 
 	// Agent service layer (requires event bus, web search service)
 	// SessionService is passed as parameter to CreateAgentEngine method when creating AgentService
@@ -204,9 +210,18 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Chat pipeline components for processing chat requests
 	logger.Debugf(ctx, "[Container] Registering chat pipeline plugins...")
+
+	// Data source sync framework
+	logger.Debugf(ctx, "[Container] Registering data source sync framework...")
+	must(container.Provide(initConnectorRegistry))
+	must(container.Provide(datasource.NewScheduler))
+	must(container.Provide(service.NewDataSourceService))
+	must(container.Invoke(startDataSourceScheduler))
+	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Provide(chatpipeline.NewEventManager))
 	must(container.Invoke(chatpipeline.NewPluginSearch))
 	must(container.Invoke(chatpipeline.NewPluginRerank))
+	must(container.Invoke(chatpipeline.NewPluginWebFetch))
 	must(container.Invoke(chatpipeline.NewPluginMerge))
 	must(container.Invoke(chatpipeline.NewPluginDataAnalysis))
 	must(container.Invoke(chatpipeline.NewPluginIntoChatMessage))
@@ -238,11 +253,14 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewSystemHandler))
 	must(container.Provide(handler.NewMCPServiceHandler))
 	must(container.Provide(handler.NewWebSearchHandler))
+	must(container.Provide(handler.NewWebSearchProviderHandler))
 	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(service.NewSkillService))
 	must(container.Provide(handler.NewSkillHandler))
 	must(container.Provide(handler.NewOrganizationHandler))
 
+	// Data source handler
+	must(container.Provide(handler.NewDataSourceHandler))
 	// IM integration
 	logger.Debugf(ctx, "[Container] Registering IM integration...")
 	must(container.Provide(imPkg.NewService))
@@ -339,7 +357,7 @@ func initDatabase(cfg *config.Config) (*gorm.DB, error) {
 	case "postgres":
 		// DSN for GORM (key-value format)
 		gormDSN := fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 			os.Getenv("DB_HOST"),
 			os.Getenv("DB_PORT"),
 			os.Getenv("DB_USER"),
@@ -397,7 +415,11 @@ func initDatabase(cfg *config.Config) (*gorm.DB, error) {
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", os.Getenv("DB_DRIVER"))
 	}
-	db, err := gorm.Open(dialector, &gorm.Config{})
+	db, err := gorm.Open(dialector, &gorm.Config{
+		NowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -933,22 +955,14 @@ func NewDuckDB() (*sql.DB, error) {
 	return sqlDB, nil
 }
 
-// registerWebSearchProviders registers all web search providers to the registry
-func registerWebSearchProviders(registry *web_search.Registry) {
-	// Register DuckDuckGo provider
-	registry.Register(web_search.DuckDuckGoProviderInfo(), func() (interfaces.WebSearchProvider, error) {
-		return web_search.NewDuckDuckGoProvider()
-	})
-
-	// Register Google provider
-	registry.Register(web_search.GoogleProviderInfo(), func() (interfaces.WebSearchProvider, error) {
-		return web_search.NewGoogleProvider()
-	})
-
-	// Register Bing provider
-	registry.Register(web_search.BingProviderInfo(), func() (interfaces.WebSearchProvider, error) {
-		return web_search.NewBingProvider()
-	})
+// registerWebSearchProviders registers all web search provider types to the registry.
+// Each provider type is registered with its factory function that accepts parameters.
+// Provider instances are created on-demand when tenants configure them.
+func registerWebSearchProviders(registry *infra_web_search.Registry) {
+	registry.Register("duckduckgo", infra_web_search.NewDuckDuckGoProvider)
+	registry.Register("google", infra_web_search.NewGoogleProvider)
+	registry.Register("bing", infra_web_search.NewBingProvider)
+	registry.Register("tavily", infra_web_search.NewTavilyProvider)
 }
 
 // registerIMAdapterFactories registers adapter factories for each IM platform
@@ -995,6 +1009,7 @@ func registerIMAdapterFactories(imService *imPkg.Service) {
 			client := wecom.NewLongConnClient(
 				getString(creds, "bot_id"),
 				getString(creds, "bot_secret"),
+				getString(creds, "bot_name"),
 				msgHandler,
 			)
 
@@ -1253,4 +1268,32 @@ func credentialBool(creds map[string]interface{}, key string) bool {
 	default:
 		return false
 	}
+}
+
+// initConnectorRegistry creates and populates the connector registry with all available connectors.
+func initConnectorRegistry() *datasource.ConnectorRegistry {
+	registry := datasource.NewConnectorRegistry()
+
+	// Register Feishu connector
+	_ = registry.Register(feishuConnector.NewConnector())
+
+	// Future connectors will be registered here:
+	// _ = registry.Register(notionConnector.NewConnector())
+	// _ = registry.Register(confluenceConnector.NewConnector())
+	// _ = registry.Register(yuqueConnector.NewConnector())
+	// _ = registry.Register(githubConnector.NewConnector())
+
+	return registry
+}
+
+// startDataSourceScheduler starts the data source cron scheduler and registers cleanup.
+func startDataSourceScheduler(scheduler *datasource.Scheduler, cleaner interfaces.ResourceCleaner) {
+	if err := scheduler.Start(context.Background()); err != nil {
+		logger.Warnf(context.Background(), "[Container] data source scheduler start failed: %v", err)
+	}
+
+	cleaner.RegisterWithName("DataSourceScheduler", func() error {
+		scheduler.Stop()
+		return nil
+	})
 }

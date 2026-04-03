@@ -14,6 +14,7 @@ const (
 	TypeDataTableSummary    = "datatable:summary"     // 表格摘要任务
 	TypeImageMultimodal     = "image:multimodal"      // 图片多模态处理任务（OCR + VLM Caption）
 	TypeManualProcess       = "manual:process"        // 手工知识更新任务（cleanup + 重新索引）
+	TypeDataSourceSync      = "datasource:sync"       // 数据源同步任务
 )
 
 // ExtractChunkPayload represents the extract chunk task payload
@@ -38,6 +39,7 @@ type DocumentProcessPayload struct {
 	EnableMultimodel         bool     `json:"enable_multimodel"`
 	EnableQuestionGeneration bool     `json:"enable_question_generation"` // 是否启用问题生成
 	QuestionCount            int      `json:"question_count,omitempty"`   // 每个chunk生成的问题数量
+	Language                 string   `json:"language,omitempty"`         // Request locale for {{language}} in prompt templates
 }
 
 // FAQImportPayload represents the FAQ import task payload (including dry run mode)
@@ -150,6 +152,7 @@ type ImageMultimodalPayload struct {
 	ImageLocalPath  string `json:"image_local_path"`   // deprecated: kept for backward compat with in-flight tasks
 	EnableOCR       bool   `json:"enable_ocr"`
 	EnableCaption   bool   `json:"enable_caption"`
+	Language        string `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
 }
 
 // KBCloneTaskStatus represents the status of a knowledge base clone task

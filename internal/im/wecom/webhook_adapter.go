@@ -167,13 +167,20 @@ func (a *WebhookAdapter) ParseCallback(c *gin.Context) (*im.IncomingMessage, err
 	// Determine chat type
 	chatType := im.ChatTypeDirect
 	chatID := ""
-	if msg.ChatID != "" {
+	isGroup := msg.ChatID != ""
+	if isGroup {
 		chatType = im.ChatTypeGroup
 		chatID = msg.ChatID
 	}
 
 	switch msg.MsgType {
 	case "text":
+		// Strip @mention in group chat (same issue as long connection mode).
+		// Webhook adapter has no persistent state, so use the standalone helper.
+		textContent := msg.Content
+		if isGroup {
+			textContent = stripAtMentionBasic(textContent)
+		}
 		return &im.IncomingMessage{
 			Platform:    im.PlatformWeCom,
 			MessageType: im.MessageTypeText,
@@ -181,7 +188,7 @@ func (a *WebhookAdapter) ParseCallback(c *gin.Context) (*im.IncomingMessage, err
 			UserName:    msg.FromUserName,
 			ChatID:      chatID,
 			ChatType:    chatType,
-			Content:     strings.TrimSpace(msg.Content),
+			Content:     strings.TrimSpace(textContent),
 			MessageID:   msg.MsgID,
 		}, nil
 
@@ -503,8 +510,8 @@ func (a *WebhookAdapter) DownloadFile(ctx context.Context, msg *im.IncomingMessa
 func downloadFromURL(ctx context.Context, rawURL, fileName string) (io.ReadCloser, string, error) {
 	// SSRF protection: reject internal/private URLs unless on the WeCom API allowlist.
 	if !isAllowedIMAPIHost(rawURL) {
-		if safe, reason := secutils.IsSSRFSafeURL(rawURL); !safe {
-			return nil, "", fmt.Errorf("URL rejected for security reasons: %s", reason)
+		if err := secutils.ValidateURLForSSRF(rawURL); err != nil {
+			return nil, "", fmt.Errorf("URL rejected for security reasons: %v", err)
 		}
 	}
 
@@ -582,7 +589,7 @@ func downloadFromURL(ctx context.Context, rawURL, fileName string) (io.ReadClose
 }
 
 // allowedIMAPIHosts lists IM platform API hosts that are trusted for file downloads.
-// URLs pointing to these hosts bypass IsSSRFSafeURL checks because the WeCom API
+// URLs pointing to these hosts bypass isSSRFSafeURL checks because the WeCom API
 // itself returns these URLs in callback payloads (e.g. temporary media links).
 var allowedIMAPIHosts = []string{
 	"qyapi.weixin.qq.com",
