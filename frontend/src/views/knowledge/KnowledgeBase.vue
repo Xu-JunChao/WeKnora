@@ -11,6 +11,7 @@ import { useUIStore } from '@/stores/ui';
 import { useOrganizationStore } from '@/stores/organization';
 import { useAuthStore } from '@/stores/auth';
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue';
+import UploadConfigDialog from '@/components/UploadConfigDialog.vue';
 const usemenuStore = useMenuStore();
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
@@ -42,6 +43,10 @@ const uploadInputRef = ref<HTMLInputElement | null>(null);
 const folderUploadInputRef = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
 const kbLoading = ref(false);
+// Upload config dialog state
+const showUploadConfigDialog = ref(false);
+const pendingUploadFiles = ref<File[]>([]);
+const pendingFolderFiles = ref(false); // Flag to track if pending files are from folder upload
 const isFAQ = computed(() => (kbInfo.value?.type || '') === 'faq');
 const missingStorageEngine = computed(() => {
   if (!kbInfo.value || isFAQ.value) return false
@@ -1038,16 +1043,48 @@ const handleDocumentUpload = async (event: Event) => {
     MessagePlugin.warning(t('knowledgeBase.filesSkippedNoEngine', { count: skippedCount }));
   }
 
+  // Store valid files and show config dialog
+  pendingUploadFiles.value = validFiles;
+  showUploadConfigDialog.value = true;
+  resetUploadInput();
+};
+
+// Handle upload config dialog confirm - dispatch to correct upload function
+const handleUploadConfigConfirm = (chunkingConfig: any) => {
+  if (pendingFolderFiles.value) {
+    uploadFolderFilesWithConfig(chunkingConfig);
+  } else {
+    uploadFilesWithConfig(chunkingConfig);
+  }
+};
+
+// Internal function to upload files with optional chunking config
+const uploadFilesWithConfig = async (chunkingConfig: any) => {
+  const validFiles = pendingUploadFiles.value;
+  if (validFiles.length === 0) return;
+
+  const tagIdToUpload = selectedTagId.value !== '__untagged__' ? selectedTagId.value : undefined;
+
   let successCount = 0;
   let failCount = 0;
   const totalCount = validFiles.length;
 
-  // 获取当前选中的分类ID（如果不是"未分类"则传递）
-  const tagIdToUpload = selectedTagId.value !== '__untagged__' ? selectedTagId.value : undefined;
 
   for (const file of validFiles) {
     try {
-      const responseData: any = await uploadKnowledgeFile(kbId.value, { file, tag_id: tagIdToUpload });
+      const uploadData: any = { file, tag_id: tagIdToUpload };
+      // Add chunking_config if provided (convert camelCase to snake_case for backend)
+      if (chunkingConfig) {
+        uploadData.chunking_config = JSON.stringify({
+          chunk_size: chunkingConfig.chunkSize,
+          chunk_overlap: chunkingConfig.chunkOverlap,
+          separators: chunkingConfig.separators,
+          enable_parent_child: chunkingConfig.enableParentChild,
+          parent_chunk_size: chunkingConfig.parentChunkSize,
+          child_chunk_size: chunkingConfig.childChunkSize
+        });
+      }
+      const responseData: any = await uploadKnowledgeFile(kbId.value, uploadData);
       const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (!responseData?.error && responseData);
       if (isSuccess) {
         successCount++;
@@ -1099,6 +1136,8 @@ const handleDocumentUpload = async (event: Event) => {
     }
   }
 
+  // Clear pending files
+  pendingUploadFiles.value = [];
   resetUploadInput();
 };
 
@@ -1152,6 +1191,18 @@ const handleFolderUpload = async (event: Event) => {
     return;
   }
 
+  // Store valid files and show config dialog
+  pendingUploadFiles.value = validFiles;
+  pendingFolderFiles.value = true; // Mark as folder upload
+  showUploadConfigDialog.value = true;
+  if (input) input.value = '';
+};
+
+// Internal function to upload folder files with optional chunking config
+const uploadFolderFilesWithConfig = async (chunkingConfig: any) => {
+  const validFiles = pendingUploadFiles.value;
+  if (validFiles.length === 0) return;
+
   MessagePlugin.info(t('knowledgeBase.uploadingFolder', { total: validFiles.length }));
 
   // 批量上传
@@ -1171,7 +1222,19 @@ const handleFolderUpload = async (event: Event) => {
     }
 
     try {
-      await uploadKnowledgeFile(kbId.value, { file, fileName, tag_id: tagIdToUpload });
+      const uploadData: any = { file, fileName, tag_id: tagIdToUpload };
+      // Add chunking_config if provided (convert camelCase to snake_case for backend)
+      if (chunkingConfig) {
+        uploadData.chunking_config = JSON.stringify({
+          chunk_size: chunkingConfig.chunkSize,
+          chunk_overlap: chunkingConfig.chunkOverlap,
+          separators: chunkingConfig.separators,
+          enable_parent_child: chunkingConfig.enableParentChild,
+          parent_chunk_size: chunkingConfig.parentChunkSize,
+          child_chunk_size: chunkingConfig.childChunkSize
+        });
+      }
+      await uploadKnowledgeFile(kbId.value, uploadData);
       successCount++;
     } catch (error: any) {
       failCount++;
@@ -1192,7 +1255,9 @@ const handleFolderUpload = async (event: Event) => {
     MessagePlugin.error(t('knowledgeBase.uploadAllFailed'));
   }
 
-  if (input) input.value = '';
+  // Clear pending files
+  pendingUploadFiles.value = [];
+  pendingFolderFiles.value = false;
 };
 
 const handleManualCreate = () => {
@@ -2047,13 +2112,20 @@ async function createNewSession(value: string): Promise<void> {
   </template>
 
   <!-- 知识库编辑器（创建/编辑统一组件） -->
-  <KnowledgeBaseEditorModal 
+  <KnowledgeBaseEditorModal
     :visible="uiStore.showKBEditorModal"
     :mode="uiStore.kbEditorMode"
     :kb-id="uiStore.currentKBId || undefined"
     :initial-type="uiStore.kbEditorType"
     @update:visible="(val) => val ? null : uiStore.closeKBEditor()"
     @success="handleKBEditorSuccess"
+  />
+  <UploadConfigDialog
+    v-model:visible="showUploadConfigDialog"
+    :files="pendingUploadFiles.map(f => ({ name: f.name, size: f.size }))"
+    :kb-chunking-config="kbInfo?.chunking_config"
+    @confirm="handleUploadConfigConfirm"
+    @cancel="pendingUploadFiles = []; pendingFolderFiles.value = false"
   />
 </template>
 <style>

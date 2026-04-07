@@ -77,7 +77,8 @@ export function togglePinKnowledgeBase(id: string) {
 
 // 知识文件 API（基于具体知识库）
 // data.tag_id: 可选，指定知识所属的分类ID
-export function uploadKnowledgeFile(kbId: string, data: { file: File; tag_id?: string; [key: string]: any } = { file: new File([], '') }, onProgress?: (progressEvent: any) => void) {
+// data.chunking_config: 可选，文档级分块配置（JSON 字符串）
+export function uploadKnowledgeFile(kbId: string, data: { file: File; tag_id?: string; chunking_config?: string; [key: string]: any } = { file: new File([], '') }, onProgress?: (progressEvent: any) => void) {
   const formData = new FormData();
   Object.keys(data).forEach(key => {
     if (data[key] !== undefined) formData.append(key, data[key]);

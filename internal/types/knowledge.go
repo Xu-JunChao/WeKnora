@@ -109,6 +109,8 @@ type Knowledge struct {
 	StorageSize int64 `json:"storage_size"`
 	// Metadata of the knowledge
 	Metadata JSON `json:"metadata"           gorm:"type:json"`
+	// Chunking configuration for document-level override (optional, uses knowledge base config when nil)
+	ChunkingConfig *ChunkingConfig `json:"chunking_config,omitempty" gorm:"type:jsonb;column:chunking_config"`
 	// Last FAQ import result (for FAQ type knowledge only)
 	LastFAQImportResult JSON `json:"last_faq_import_result" gorm:"type:json"`
 	// Creation time of the knowledge

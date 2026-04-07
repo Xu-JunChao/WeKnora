@@ -282,8 +282,20 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 
 	channel := c.PostForm("channel")
 
+	// Parse chunking_config if provided (optional, uses knowledge base config when not provided)
+	var chunkingConfig *types.ChunkingConfig
+	chunkingConfigStr := c.PostForm("chunking_config")
+	if chunkingConfigStr != "" {
+		if err := json.Unmarshal([]byte(chunkingConfigStr), &chunkingConfig); err != nil {
+			logger.Error(ctx, "Failed to parse chunking_config", err)
+			c.Error(errors.NewBadRequestError("Invalid chunking_config format").WithDetails(err.Error()))
+			return
+		}
+		logger.Infof(ctx, "Received chunking_config: %s", secutils.SanitizeForLog(chunkingConfigStr))
+	}
+
 	// Create knowledge entry from the file
-	knowledge, err := h.kgService.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, tagID, channel)
+	knowledge, err := h.kgService.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, tagID, channel, chunkingConfig)
 	// Check for duplicate knowledge error
 	if err != nil {
 		if h.handleDuplicateKnowledgeError(c, err, knowledge, "file") {

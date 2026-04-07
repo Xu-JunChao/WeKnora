@@ -158,6 +158,7 @@ export default function (knowledgeBaseId?: string) {
       file_type: "",
       description: "",
       summary_status: "",
+      chunking_config: null,
       chunkLoadError: "",
     });
     getKnowledgeDetails(item.id)
@@ -174,6 +175,7 @@ export default function (knowledgeBaseId?: string) {
             file_type: data.file_type || '',
             description: data.description || '',
             summary_status: data.summary_status || '',
+            chunking_config: data.chunking_config || null,
           });
         }
       })

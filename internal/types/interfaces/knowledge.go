@@ -22,6 +22,7 @@ type KnowledgeService interface {
 		customFileName string,
 		tagID string,
 		channel string,
+		chunkingConfig *types.ChunkingConfig,
 	) (*types.Knowledge, error)
 	// CreateKnowledgeFromURL creates knowledge from a URL.
 	// When fileName or fileType is provided (or the URL path has a known file extension),

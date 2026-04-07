@@ -187,7 +187,7 @@ func defaultChannel(ch string) string {
 
 // CreateKnowledgeFromFile creates a knowledge entry from an uploaded file
 func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
-	kbID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, tagID string, channel string,
+	kbID string, file *multipart.FileHeader, metadata map[string]string, enableMultimodel *bool, customFileName string, tagID string, channel string, chunkingConfig *types.ChunkingConfig,
 ) (*types.Knowledge, error) {
 	logger.Info(ctx, "Start creating knowledge from file")
 
@@ -350,6 +350,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		UpdatedAt:        time.Now(),
 		EmbeddingModelID: kb.EmbeddingModelID,
 		Metadata:         metadataJSON,
+		ChunkingConfig:   chunkingConfig, // 文档级分块配置（可选，为空时使用知识库配置）
 	}
 	// Save knowledge record to database
 	logger.Info(ctx, "Saving knowledge record to database")
@@ -7075,11 +7076,14 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		}
 	}
 
+	// Determine effective chunking config: document config > KB config > defaults
+	effectiveConfig := resolveChunkingConfig(knowledge.ChunkingConfig, &kb.ChunkingConfig)
+
 	// Manual content is markdown - chunk directly with Go chunker
 	chunkCfg := chunker.SplitterConfig{
-		ChunkSize:    kb.ChunkingConfig.ChunkSize,
-		ChunkOverlap: kb.ChunkingConfig.ChunkOverlap,
-		Separators:   kb.ChunkingConfig.Separators,
+		ChunkSize:    effectiveConfig.ChunkSize,
+		ChunkOverlap: effectiveConfig.ChunkOverlap,
+		Separators:   effectiveConfig.Separators,
 	}
 	if chunkCfg.ChunkSize <= 0 {
 		chunkCfg.ChunkSize = 512
@@ -7106,8 +7110,8 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		}
 	}
 
-	if kb.ChunkingConfig.EnableParentChild {
-		parentCfg, childCfg := buildParentChildConfigs(kb.ChunkingConfig, chunkCfg)
+	if effectiveConfig.EnableParentChild {
+		parentCfg, childCfg := buildParentChildConfigs(*effectiveConfig, chunkCfg)
 		pcResult := chunker.SplitTextParentChild(clean, parentCfg, childCfg)
 		parsed = make([]types.ParsedChunk, len(pcResult.Children))
 		for i, c := range pcResult.Children {
@@ -7648,6 +7652,9 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		return nil
 	}
 
+	// Determine effective chunking config: document config > KB config > defaults
+	effectiveConfig := resolveChunkingConfig(knowledge.ChunkingConfig, &kb.ChunkingConfig)
+
 	knowledge.ParseStatus = "processing"
 	knowledge.UpdatedAt = time.Now()
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
@@ -7738,7 +7745,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		payload.FilePath = filePath
 		payload.FileName = resolvedFileName
 		payload.FileType = resolvedFileType
-		convertResult, err = s.convert(ctx, payload, kb, knowledge, isLastRetry)
+		convertResult, err = s.convert(ctx, payload, kb, knowledge, isLastRetry, effectiveConfig)
 		if err != nil {
 			return err
 		}
@@ -7747,7 +7754,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		}
 	} else if payload.URL != "" {
 		// URL import
-		convertResult, err = s.convert(ctx, payload, kb, knowledge, isLastRetry)
+		convertResult, err = s.convert(ctx, payload, kb, knowledge, isLastRetry, effectiveConfig)
 		if err != nil {
 			return err
 		}
@@ -7791,7 +7798,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		return nil
 	} else {
 		// File import
-		convertResult, err = s.convert(ctx, payload, kb, knowledge, isLastRetry)
+		convertResult, err = s.convert(ctx, payload, kb, knowledge, isLastRetry, effectiveConfig)
 		if err != nil {
 			return err
 		}
@@ -7880,9 +7887,9 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 
 	// Step 3: Split into chunks using Go chunker
 	chunkCfg := chunker.SplitterConfig{
-		ChunkSize:    kb.ChunkingConfig.ChunkSize,
-		ChunkOverlap: kb.ChunkingConfig.ChunkOverlap,
-		Separators:   kb.ChunkingConfig.Separators,
+		ChunkSize:    effectiveConfig.ChunkSize,
+		ChunkOverlap: effectiveConfig.ChunkOverlap,
+		Separators:   effectiveConfig.Separators,
 	}
 	if chunkCfg.ChunkSize <= 0 {
 		chunkCfg.ChunkSize = 512
@@ -7901,8 +7908,8 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		StoredImages:             storedImages,
 	}
 
-	if kb.ChunkingConfig.EnableParentChild {
-		parentCfg, childCfg := buildParentChildConfigs(kb.ChunkingConfig, chunkCfg)
+	if effectiveConfig.EnableParentChild {
+		parentCfg, childCfg := buildParentChildConfigs(*effectiveConfig, chunkCfg)
 		pcResult := chunker.SplitTextParentChild(convertResult.MarkdownContent, parentCfg, childCfg)
 		chunks = make([]types.ParsedChunk, len(pcResult.Children))
 		for i, c := range pcResult.Children {
@@ -7941,6 +7948,21 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 	return nil
 }
 
+// resolveChunkingConfig returns the effective chunking configuration based on priority:
+// 1. Document-level chunking_config (if exists)
+// 2. Knowledge base ChunkingConfig
+// 3. System defaults (handled by zero-value checks in chunking logic)
+func resolveChunkingConfig(docConfig *types.ChunkingConfig, kbConfig *types.ChunkingConfig) *types.ChunkingConfig {
+	if docConfig != nil {
+		return docConfig
+	}
+	if kbConfig != nil {
+		return kbConfig
+	}
+	// Return empty config, defaults will be applied in chunking logic
+	return &types.ChunkingConfig{}
+}
+
 // convert handles both file and URL reading using a unified ReadRequest.
 func (s *knowledgeService) convert(
 	ctx context.Context,
@@ -7948,6 +7970,7 @@ func (s *knowledgeService) convert(
 	kb *types.KnowledgeBase,
 	knowledge *types.Knowledge,
 	isLastRetry bool,
+	effectiveConfig *types.ChunkingConfig,
 ) (*types.ReadResult, error) {
 	isURL := payload.URL != ""
 	fileType := payload.FileType
@@ -7964,9 +7987,9 @@ func (s *knowledgeService) convert(
 		}
 	}
 
-	parserEngine := kb.ChunkingConfig.ResolveParserEngine(fileType)
+	parserEngine := effectiveConfig.ResolveParserEngine(fileType)
 	if isURL {
-		parserEngine = kb.ChunkingConfig.ResolveParserEngine("url")
+		parserEngine = effectiveConfig.ResolveParserEngine("url")
 	}
 
 	logger.Infof(ctx, "[convert] kb=%s fileType=%s isURL=%v engine=%q rules=%+v",

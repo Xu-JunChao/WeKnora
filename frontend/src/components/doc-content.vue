@@ -716,6 +716,18 @@ const downloadFile = () => {
       MessagePlugin.error(t('file.downloadFailed'));
     });
 };
+
+// Format separators array for display
+const formatSeparators = (separators: any[]): string => {
+  if (!separators || separators.length === 0) return '';
+  return separators.map((s) => {
+    if (s === '\n\n') return '\\n\\n';
+    if (s === '\n') return '\\n';
+    if (s === ' ') return '[space]';
+    return s;
+  }).join(', ');
+};
+
 const handleDetailsScroll = () => {
   if (doc && !loadingChunks) {
     let pageNum = Math.ceil(props.details.total / 25);
@@ -853,6 +865,37 @@ const handleDetailsScroll = () => {
         <audio v-else-if="audioBlobUrl" controls class="audio-player" :src="audioBlobUrl">
           {{ $t('preview.audioNotSupported') }}
         </audio>
+      </div>
+
+      <!-- 文档级分块配置 -->
+      <div v-if="details.chunking_config" class="chunking-config-section">
+        <span class="label">{{ $t('knowledgeBase.chunkingConfig') }}</span>
+        <div class="chunking-config-content">
+          <div class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.chunkSize') }}:</span>
+            <span class="config-value">{{ details.chunking_config.chunk_size || details.chunking_config.chunkSize }}</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.chunkOverlap') }}:</span>
+            <span class="config-value">{{ details.chunking_config.chunk_overlap || details.chunking_config.chunkOverlap }}</span>
+          </div>
+          <div v-if="details.chunking_config.separators && details.chunking_config.separators.length > 0" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.chunkSeparators') }}:</span>
+            <span class="config-value">{{ formatSeparators(details.chunking_config.separators) }}</span>
+          </div>
+          <div v-if="details.chunking_config.enable_parent_child !== undefined || details.chunking_config.enableParentChild !== undefined" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.parentChildChunking') }}:</span>
+            <span class="config-value">{{ (details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild) ? $t('common.enabled') : $t('common.disabled') }}</span>
+          </div>
+          <div v-if="(details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild)" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.parentChunkSize') }}:</span>
+            <span class="config-value">{{ details.chunking_config.parent_chunk_size || details.chunking_config.parentChunkSize || 4096 }}</span>
+          </div>
+          <div v-if="(details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild)" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.childChunkSize') }}:</span>
+            <span class="config-value">{{ details.chunking_config.child_chunk_size || details.chunking_config.childChunkSize || 384 }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- 合并视图 -->
@@ -1076,6 +1119,47 @@ const handleDetailsScroll = () => {
     border-radius: 4px;
     color: var(--td-text-color-placeholder);
     font-size: 13px;
+  }
+}
+
+// 文档级分块配置区域
+.chunking-config-section {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+  margin-top: 8px;
+
+  .label {
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .chunking-config-content {
+    padding: 16px;
+    background: var(--td-bg-color-container-hover);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .config-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+
+      .config-label {
+        font-weight: 500;
+        color: var(--td-text-color-secondary);
+        min-width: 120px;
+      }
+
+      .config-value {
+        color: var(--td-text-color-primary);
+        font-weight: 400;
+      }
+    }
   }
 }
 
