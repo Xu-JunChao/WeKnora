@@ -1138,6 +1138,7 @@ const uploadFilesWithConfig = async (chunkingConfig: any) => {
 
   // Clear pending files
   pendingUploadFiles.value = [];
+  pendingFolderFiles.value = false;
   resetUploadInput();
 };
 
@@ -2125,7 +2126,7 @@ async function createNewSession(value: string): Promise<void> {
     :files="pendingUploadFiles.map(f => ({ name: f.name, size: f.size }))"
     :kb-chunking-config="kbInfo?.chunking_config"
     @confirm="handleUploadConfigConfirm"
-    @cancel="pendingUploadFiles = []; pendingFolderFiles.value = false"
+    @cancel="pendingUploadFiles = []; pendingFolderFiles = false"
   />
 </template>
 <style>

@@ -1016,6 +1016,8 @@ export default {
     github: 'GitHub',
     on: "开启",
     off: "关闭",
+    enabled: "已启用",
+    disabled: "已停用",
     resetToDefault: "恢复默认",
     confirmDelete: "确认删除",
     deleteSuccess: "删除成功",

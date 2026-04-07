@@ -1169,6 +1169,8 @@ export default {
     github: 'GitHub',
     on: 'On',
     off: 'Off',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
     resetToDefault: 'Reset to default',
     confirmDelete: 'Confirm Delete',
     deleteSuccess: 'Deleted successfully',

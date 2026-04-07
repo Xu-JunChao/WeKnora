@@ -792,7 +792,38 @@ const handleDetailsScroll = () => {
           </div>
         </div>
       </div>
-      
+
+      <!-- 文档级分块配置 -->
+      <div v-if="details.chunking_config" class="chunking-config-section">
+        <span class="label">{{ $t('knowledgeBase.chunkingConfig') }}</span>
+        <div class="chunking-config-content">
+          <div class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.chunkSize') }}:</span>
+            <span class="config-value">{{ details.chunking_config.chunk_size || details.chunking_config.chunkSize }}</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.chunkOverlap') }}:</span>
+            <span class="config-value">{{ details.chunking_config.chunk_overlap || details.chunking_config.chunkOverlap }}</span>
+          </div>
+          <div v-if="details.chunking_config.separators && details.chunking_config.separators.length > 0" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.chunkSeparators') }}:</span>
+            <span class="config-value">{{ formatSeparators(details.chunking_config.separators) }}</span>
+          </div>
+          <div v-if="details.chunking_config.enable_parent_child !== undefined || details.chunking_config.enableParentChild !== undefined" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.parentChildChunking') }}:</span>
+            <span class="config-value">{{ (details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild) ? $t('common.enabled') : $t('common.disabled') }}</span>
+          </div>
+          <div v-if="(details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild)" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.parentChunkSize') }}:</span>
+            <span class="config-value">{{ details.chunking_config.parent_chunk_size || details.chunking_config.parentChunkSize || 4096 }}</span>
+          </div>
+          <div v-if="(details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild)" class="config-row">
+            <span class="config-label">{{ $t('knowledgeBase.childChunkSize') }}:</span>
+            <span class="config-value">{{ details.chunking_config.child_chunk_size || details.chunking_config.childChunkSize || 384 }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 文档摘要 -->
       <div v-if="details.description" class="summary_box">
         <span class="label">{{ $t('knowledgeBase.documentSummary') }}</span>
@@ -865,37 +896,6 @@ const handleDetailsScroll = () => {
         <audio v-else-if="audioBlobUrl" controls class="audio-player" :src="audioBlobUrl">
           {{ $t('preview.audioNotSupported') }}
         </audio>
-      </div>
-
-      <!-- 文档级分块配置 -->
-      <div v-if="details.chunking_config" class="chunking-config-section">
-        <span class="label">{{ $t('knowledgeBase.chunkingConfig') }}</span>
-        <div class="chunking-config-content">
-          <div class="config-row">
-            <span class="config-label">{{ $t('knowledgeBase.chunkSize') }}:</span>
-            <span class="config-value">{{ details.chunking_config.chunk_size || details.chunking_config.chunkSize }}</span>
-          </div>
-          <div class="config-row">
-            <span class="config-label">{{ $t('knowledgeBase.chunkOverlap') }}:</span>
-            <span class="config-value">{{ details.chunking_config.chunk_overlap || details.chunking_config.chunkOverlap }}</span>
-          </div>
-          <div v-if="details.chunking_config.separators && details.chunking_config.separators.length > 0" class="config-row">
-            <span class="config-label">{{ $t('knowledgeBase.chunkSeparators') }}:</span>
-            <span class="config-value">{{ formatSeparators(details.chunking_config.separators) }}</span>
-          </div>
-          <div v-if="details.chunking_config.enable_parent_child !== undefined || details.chunking_config.enableParentChild !== undefined" class="config-row">
-            <span class="config-label">{{ $t('knowledgeBase.parentChildChunking') }}:</span>
-            <span class="config-value">{{ (details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild) ? $t('common.enabled') : $t('common.disabled') }}</span>
-          </div>
-          <div v-if="(details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild)" class="config-row">
-            <span class="config-label">{{ $t('knowledgeBase.parentChunkSize') }}:</span>
-            <span class="config-value">{{ details.chunking_config.parent_chunk_size || details.chunking_config.parentChunkSize || 4096 }}</span>
-          </div>
-          <div v-if="(details.chunking_config.enable_parent_child || details.chunking_config.enableParentChild)" class="config-row">
-            <span class="config-label">{{ $t('knowledgeBase.childChunkSize') }}:</span>
-            <span class="config-value">{{ details.chunking_config.child_chunk_size || details.chunking_config.childChunkSize || 384 }}</span>
-          </div>
-        </div>
       </div>
 
       <!-- 合并视图 -->
