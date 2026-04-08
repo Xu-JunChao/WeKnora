@@ -93,9 +93,9 @@
     </div>
 
     <!-- Logo - Top Left -->
-    <a href="https://github.com/Tencent/WeKnora" target="_blank" class="header-logo" :title="$t('common.github')">
-      <img src="@/assets/img/weknora.png" alt="WeKnora" class="logo-image" />
-    </a>
+    <div class="header-logo">
+      <span class="logo-text">{{ $t('common.brandName') }}</span>
+    </div>
 
     <!-- Header Links - Top Right -->
     <div class="header-links">
@@ -934,9 +934,12 @@ onMounted(() => {
   z-index: 100;
   cursor: pointer;
 
-  .logo-image {
-    width: 120px;
-    height: auto;
+  .logo-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--td-text-color-anti);
+    font-family: "PingFang SC", sans-serif;
+    letter-spacing: 1px;
   }
 }
 
@@ -1261,8 +1264,8 @@ onMounted(() => {
     top: 26px;
     left: 40px;
 
-    .logo-image {
-      width: 100px;
+    .logo-text {
+      font-size: 18px;
     }
   }
 
@@ -1309,8 +1312,8 @@ onMounted(() => {
     top: 22px;
     left: 30px;
 
-    .logo-image {
-      width: 80px;
+    .logo-text {
+      font-size: 16px;
     }
   }
 
@@ -1369,8 +1372,8 @@ onMounted(() => {
     top: 18px;
     left: 20px;
 
-    .logo-image {
-      width: 70px;
+    .logo-text {
+      font-size: 14px;
     }
   }
 
@@ -1435,10 +1438,6 @@ html[theme-mode="dark"] {
 
   .connection-line {
     stroke: rgba(255, 255, 255, 0.25);
-  }
-
-  .header-logo .logo-image {
-    filter: invert(1) hue-rotate(180deg) brightness(1.1);
   }
 
   .header-link {

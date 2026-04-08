@@ -3,7 +3,7 @@
         <!-- 展开时：Logo + 折叠按钮同行 -->
         <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
             <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
-                <img class="logo" src="@/assets/img/weknora.png" alt="">
+                <span class="logo-text">{{ $t('common.brandName') }}</span>
             </div>
             <div class="sidebar-toggle"
                  @click="uiStore.toggleSidebar"
@@ -832,9 +832,12 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
         flex: 1;
         min-width: 0;
         overflow: hidden;
-        .logo{
-            width: 134px;
-            height: auto;
+        .logo-text{
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--td-text-color-primary);
+            font-family: "PingFang SC", sans-serif;
+            letter-spacing: 0.5px;
         }
     }
 
@@ -1256,9 +1259,9 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
 }
 </style>
 <style lang="less">
-// Dark mode: invert dark logo to light
-html[theme-mode="dark"] .aside_box .logo_box .logo {
-    filter: invert(1) hue-rotate(180deg);
+// Dark mode: logo text uses standard text color (no inversion needed)
+html[theme-mode="dark"] .aside_box .logo_box .logo-text {
+    color: var(--td-text-color-primary);
 }
 
 // Dark mode: make SVG icons match text color (loaded via <img>, currentColor won't work)

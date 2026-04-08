@@ -1167,6 +1167,7 @@ export default {
     clear: 'Clear',
     website: 'Official Website',
     github: 'GitHub',
+    brandName: '开务知识中台',
     on: 'On',
     off: 'Off',
     enabled: 'Enabled',

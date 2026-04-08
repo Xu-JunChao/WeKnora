@@ -1014,6 +1014,7 @@ export default {
     clear: "清空",
     website: "官方网站",
     github: 'GitHub',
+    brandName: "开务知识中台",
     on: "开启",
     off: "关闭",
     enabled: "已启用",
